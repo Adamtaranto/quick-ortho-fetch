@@ -40,7 +40,7 @@ xml_root = etree.parse(file_dir).getroot();
 queryID = sys.argv[1][:-4];
 
 def gi_extract(gi_string):
-	regex = re.compile("^(gi\|\w+)");
+	regex = re.compile("^gi\|(\w+)");
 	return regex.findall(gi_string.strip());
 
 xml_iterations = xml_root.find("BlastOutput_iterations").findall("Iteration"); #list of xml elements <iteration>
