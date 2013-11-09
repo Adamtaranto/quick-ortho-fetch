@@ -12,7 +12,6 @@
 
 
 ### Import modules
-import sys; #for command line argument handling
 import argparse; 
 import xml.etree.ElementTree as etree; #for generic xml handling
 from Bio import SeqIO; #For .fasta output
@@ -34,6 +33,8 @@ def iteration_gi_extract(iteration_object): #takes iteration number, finds gid f
 	query_id = regex.findall(iteration_object.find("Iteration_query-ID").text.strip());
 	if query_id == []:
 		query_id = regex.findall(iteration_object.find("Iteration_query-def").text.strip());
+		if query_id == []: #handles the event that the query has no gid, ie it may be an unpublished sequence.
+			query_id = [iteration_object.find("Iteration_query-def").text.replace(" ", "_") + iteration_object.find("Iteration_query-ID").text]; #note that this is as a list because the regex.findall() terms give lists as output, it took fewer steps change this.
 	return query_id[0];
 
 ### Argument handling
@@ -95,7 +96,8 @@ for key in gene_dict:
 	#	temp_hit_set.add(key);
 temp_hit_set.clear();
 
-print "Fetching "+`len(gene_list_master)`+" records from NCBI."
+print "Found "+`len(gene_dict)`+" queries in xml, containing total "+`sum([len(gene_dict[key]) for key in gene_dict])`+" unique (to query) gid's with e-value < "+repr(e_value_threshold)+".";
+print "Fetching "+`len(gene_list_master)`+" unique records from NCBI.";
 
 records_written=0; #counts how many files retrieved successfully 
 with open(file_dir_output, 'w') as file_output: #opens output fasta file, can also be append mode if required?
@@ -107,7 +109,9 @@ with open(file_dir_output, 'w') as file_output: #opens output fasta file, can al
 			SeqIO.write(Entrez_record, file_output, "fasta");
 			records_written+=1
 		except: #Catches all exceptions
-			print "Error retrieving or writing "+repr(gid)+", please check fasta file or try again."
-			print `sys.exc_info()`+"\n";
+			print "Error retrieving or writing "+repr(gid)+", please check fasta file/xml and try again.";
+			print "Hint: Check that gi|'number' is present in xml file";
+			print `sys.exc_info()`;
+			raise;
 
-print "Successfully wrote "+repr(records_written)+" sequences to file: "+ file_dir_output +"."
+print "Successfully wrote "+repr(records_written)+" sequences to file: "+ file_dir_output +".";
