@@ -44,7 +44,7 @@ arg_parser.add_argument("database", help="Which database to direct entrez query 
 arg_parser.add_argument("email", help="Email for entrez record retrieval, tells NCBI who you are.");
 arg_parser.add_argument("-n", "--number_unique_gids", type=int, default=50, help="Number of unique gids to extract for each query");
 arg_parser.add_argument("-e", "--e_value_threshold", type=float, default=1e-20, help="Maximum e-value allowed in screening, enter as decimal or in scientific notation (eg. 1e-20)");
-arg_parser.add_argument("-o", "--file_dir_output", default=arg_parser.parse_args().file_dir[:-4]+"_"+time.strftime("%d%m%y")+"_records.fas", help="Directory/name of output file");
+arg_parser.add_argument("-o", "--file_dir_output", default="quickOrtho_"+`time.strftime("%d%m%y")`+"_output_records.fas", help="Directory/name of output file");
 
 args = arg_parser.parse_args();
 
@@ -81,11 +81,13 @@ for key in gene_dict:
 
 	if len(gene_dict[key]) > number_unique_gids: #Selects the requested number of lowest e-values from gene_list then outputs to gene_list_master
 		i=0;
-		while (i<number_unique_gids):
+		j=0;
+		while (i<number_unique_gids and j<= len(gene_dict[key])):
 			if gene_dict[key][i][0] not in temp_hit_set: #prevents duplicate gi instances from being added to gene_list_master 
 				gene_list_master.append(gene_dict[key][i][0]);
 				temp_hit_set.add(gene_dict[key][i][0]);
 				i+=1;
+			j+=1;
 	else: # Handler for event that there are fewer list items than requested
 		for tu in gene_dict[key]: # where tu = the tuple (gid, evalue)
 			if tu[0] not in temp_hit_set: #prevents duplicate gi instances from being added to gene_list_master 
@@ -112,6 +114,6 @@ with open(file_dir_output, 'w') as file_output: #opens output fasta file, can al
 			print "Error retrieving or writing "+repr(gid)+", please check fasta file/xml and try again.";
 			print "Hint: Check that gi|'number' is present in xml file";
 			print `sys.exc_info()`;
-			raise;
+			raise; #If you want the loop to continue running after errors, comment out the raise (this line).
 
 print "Successfully wrote "+repr(records_written)+" sequences to file: "+ file_dir_output +".";
