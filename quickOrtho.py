@@ -20,9 +20,6 @@ import re; #used for extracting gi numbers from complex strings
 
 
 ### Functions
-def quality_control(file_dir):
-	xml_root = etree.parse(file_dir).getroot();
-
 
 def gi_extract(hit_object): #takes <hit> object, looks for gid in <Hit_id> then <Hit_def>, returns gid
 	regex = re.compile("^gi\|(\w+)");
@@ -67,7 +64,7 @@ database = args.database;
 ### Code
 print "#################### Begin quickOrtho ####################";
 print "";
-print "Extracting records from "+repr(file_dir)+"." 
+print "Extracting records from "+repr(file_dir)+".";
 xml_root = etree.parse(file_dir).getroot();
 xml_iterations = xml_root.find("BlastOutput_iterations").findall("Iteration"); #list of xml elements <iteration>
 for iteration in xml_iterations: #Loops through each alignment query.
@@ -90,13 +87,11 @@ for key in gene_dict:
 
 	if len(gene_dict[key]) > number_unique_gids: #Selects the requested number of lowest e-values from gene_list then outputs to gene_list_master
 		i=0;
-		j=0;
-		while (i<number_unique_gids and j<len(gene_dict[key])):
+		while (i<number_unique_gids):
 			if gene_dict[key][i][0] not in temp_hit_set: #prevents duplicate gi instances from being added to gene_list_master 
 				gene_list_master.append(gene_dict[key][i][0]);
 				temp_hit_set.add(gene_dict[key][i][0]);
-				i+=1;
-			j+=1;
+			i+=1;
 	else: # Handler for event that there are fewer list items than requested
 		for tu in gene_dict[key]: # where tu = the tuple (gid, evalue)
 			if tu[0] not in temp_hit_set: #prevents duplicate gi instances from being added to gene_list_master 
@@ -119,7 +114,7 @@ with open(file_dir_output, 'w') as file_output: #opens output fasta file, can al
 			Entrez_handle.close();
 			SeqIO.write(Entrez_record, file_output, "fasta");
 			records_written+=1
-			print "Retrieving record "+repr(records_written)+" of "+repr(len(gene_list_master))+". gi|"+repr(gid)+".";
+			print "Retrieving record "+repr(records_written)+" of "+repr(len(gene_list_master))+". gi|"+gid+".";
 		except: #Catches all exceptions
 			print "Error retrieving or writing "+repr(gid)+", please check fasta file/xml and try again.";
 			print "Hint: Check that gi|'number' is present in xml file";
@@ -128,5 +123,6 @@ with open(file_dir_output, 'w') as file_output: #opens output fasta file, can al
 
 print "Successfully wrote "+repr(records_written)+" sequences to file: "+ file_dir_output +".";
 print "";
+
 print "#################### End quickOrtho ####################";
 
