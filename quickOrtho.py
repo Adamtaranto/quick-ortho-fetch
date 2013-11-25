@@ -16,11 +16,14 @@ import argparse;
 import xml.etree.ElementTree as etree; #for generic xml handling
 from Bio import SeqIO; #For .fasta output
 from Bio import Entrez; #For .fasta output
-import time; #For output file name
 import re; #used for extracting gi numbers from complex strings
 
 
 ### Functions
+def quality_control(file_dir):
+	xml_root = etree.parse(file_dir).getroot();
+
+
 def gi_extract(hit_object): #takes <hit> object, looks for gid in <Hit_id> then <Hit_def>, returns gid
 	regex = re.compile("^gi\|(\w+)");
 	hit_id = regex.findall(hit_object.find("Hit_id").text.strip());
@@ -44,7 +47,7 @@ arg_parser.add_argument("database", help="Which database to direct entrez query 
 arg_parser.add_argument("email", help="Email for entrez record retrieval, tells NCBI who you are.");
 arg_parser.add_argument("-n", "--number_unique_gids", type=int, default=50, help="Number of unique gids to extract for each query");
 arg_parser.add_argument("-e", "--e_value_threshold", type=float, default=1e-20, help="Maximum e-value allowed in screening, enter as decimal or in scientific notation (eg. 1e-20)");
-arg_parser.add_argument("-o", "--file_dir_output", default="quickOrtho_"+`time.strftime("%d%m%y")`+"_output_records.fas", help="Directory/name of output file");
+arg_parser.add_argument("-o", "--file_dir_output", default="default.fas", help="Directory/name of output file");
 
 args = arg_parser.parse_args();
 
@@ -57,9 +60,14 @@ gene_list_master = []; #list of x ordered unique gids for entrez record retrieva
 Entrez.email = args.email; #Required for request 
 temp_hit_set = set(); #temporary set for handling duplicated results between query ids/dictionary keys
 file_dir_output = args.file_dir_output;
+if file_dir_output == "default.fas":
+	file_dir_output = file_dir.split('.xml')[0]+"_quickOrthoResults.fas";
 database = args.database;
 
 ### Code
+print "#################### Begin quickOrtho ####################";
+print "";
+print "Extracting records from "+repr(file_dir)+"." 
 xml_root = etree.parse(file_dir).getroot();
 xml_iterations = xml_root.find("BlastOutput_iterations").findall("Iteration"); #list of xml elements <iteration>
 for iteration in xml_iterations: #Loops through each alignment query.
@@ -74,6 +82,7 @@ for iteration in xml_iterations: #Loops through each alignment query.
 				gene_list.append((hit_id, hit_evalue));
 		gene_dict[xml_iterations_queryID] = gene_list;
 
+print "Sorting extracted results and retrieving top "+repr(number_unique_gids)+" for each query.";
 for key in gene_dict:
 	seen = set(); #temporary set for handling duplications within query id lists
 	gene_dict[key] = [x for x in gene_dict[key] if x not in seen and not seen.add(x)] #Removes duplicates from the list of tuples for each query id
@@ -82,7 +91,7 @@ for key in gene_dict:
 	if len(gene_dict[key]) > number_unique_gids: #Selects the requested number of lowest e-values from gene_list then outputs to gene_list_master
 		i=0;
 		j=0;
-		while (i<number_unique_gids and j<= len(gene_dict[key])):
+		while (i<number_unique_gids and j<len(gene_dict[key])):
 			if gene_dict[key][i][0] not in temp_hit_set: #prevents duplicate gi instances from being added to gene_list_master 
 				gene_list_master.append(gene_dict[key][i][0]);
 				temp_hit_set.add(gene_dict[key][i][0]);
@@ -110,10 +119,14 @@ with open(file_dir_output, 'w') as file_output: #opens output fasta file, can al
 			Entrez_handle.close();
 			SeqIO.write(Entrez_record, file_output, "fasta");
 			records_written+=1
+			print "Retrieving record "+repr(records_written)+" of "+repr(len(gene_list_master))+". gi|"+repr(gid)+".";
 		except: #Catches all exceptions
 			print "Error retrieving or writing "+repr(gid)+", please check fasta file/xml and try again.";
 			print "Hint: Check that gi|'number' is present in xml file";
-			print `sys.exc_info()`;
+			print repr(sys.exc_info());
 			raise; #If you want the loop to continue running after errors, comment out the raise (this line).
 
 print "Successfully wrote "+repr(records_written)+" sequences to file: "+ file_dir_output +".";
+print "";
+print "#################### End quickOrtho ####################";
+
