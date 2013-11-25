@@ -45,7 +45,7 @@ arg_parser.add_argument("email", help="Email for entrez record retrieval, tells 
 arg_parser.add_argument("-n", "--number_unique_gids", type=int, default=50, help="Number of unique gids to extract for each query");
 arg_parser.add_argument("-e", "--e_value_threshold", type=float, default=1e-20, help="Maximum e-value allowed in screening, enter as decimal or in scientific notation (eg. 1e-20)");
 arg_parser.add_argument("-o", "--file_dir_output", default="default.fas", help="Directory/name of output file");
-
+arg_parser.add_argument("-q", "--quiet", action="store_true", help="Toggles option, to run without printing running feedback");
 args = arg_parser.parse_args();
 
 ### Variable definitions/declarations
@@ -60,11 +60,14 @@ file_dir_output = args.file_dir_output;
 if file_dir_output == "default.fas":
 	file_dir_output = file_dir.split('.xml')[0]+"_quickOrthoResults.fas";
 database = args.database;
+quiet = args.quiet;
 
 ### Code
-print "#################### Begin quickOrtho ####################";
-print "";
-print "Extracting records from "+repr(file_dir)+".";
+if not quiet:
+	print "#################### Begin quickOrtho ####################";
+	print "";
+	print "Extracting records from "+repr(file_dir)+".";
+
 xml_root = etree.parse(file_dir).getroot();
 xml_iterations = xml_root.find("BlastOutput_iterations").findall("Iteration"); #list of xml elements <iteration>
 for iteration in xml_iterations: #Loops through each alignment query.
@@ -79,7 +82,9 @@ for iteration in xml_iterations: #Loops through each alignment query.
 				gene_list.append((hit_id, hit_evalue));
 		gene_dict[xml_iterations_queryID] = gene_list;
 
-print "Sorting extracted results and retrieving top "+repr(number_unique_gids)+" for each query.";
+if not quiet:
+	print "Sorting extracted results and retrieving top "+repr(number_unique_gids)+" for each query.";
+
 for key in gene_dict:
 	seen = set(); #temporary set for handling duplications within query id lists
 	gene_dict[key] = [x for x in gene_dict[key] if x not in seen and not seen.add(x)] #Removes duplicates from the list of tuples for each query id
@@ -102,8 +107,9 @@ for key in gene_dict:
 	#	temp_hit_set.add(key);
 temp_hit_set.clear();
 
-print "Found "+`len(gene_dict)`+" queries in xml, containing total "+`sum([len(gene_dict[key]) for key in gene_dict])`+" unique (to query) gid's with e-value < "+repr(e_value_threshold)+".";
-print "Fetching "+`len(gene_list_master)`+" unique records from NCBI.";
+if not quiet:
+	print "Found "+`len(gene_dict)`+" queries in xml, containing total "+`sum([len(gene_dict[key]) for key in gene_dict])`+" unique (to query) gid's with e-value < "+repr(e_value_threshold)+".";
+	print "Fetching "+`len(gene_list_master)`+" unique records from NCBI.";
 
 records_written=0; #counts how many files retrieved successfully 
 with open(file_dir_output, 'w') as file_output: #opens output fasta file, can also be append mode if required?
@@ -114,15 +120,16 @@ with open(file_dir_output, 'w') as file_output: #opens output fasta file, can al
 			Entrez_handle.close();
 			SeqIO.write(Entrez_record, file_output, "fasta");
 			records_written+=1
-			print "Retrieving record "+repr(records_written)+" of "+repr(len(gene_list_master))+". gi|"+gid+".";
+			if not quiet: 
+				print "Retrieving record "+repr(records_written)+" of "+repr(len(gene_list_master))+". gi|"+gid+".";
 		except: #Catches all exceptions
 			print "Error retrieving or writing "+repr(gid)+", please check fasta file/xml and try again.";
 			print "Hint: Check that gi|'number' is present in xml file";
 			print repr(sys.exc_info());
 			raise; #If you want the loop to continue running after errors, comment out the raise (this line).
 
-print "Successfully wrote "+repr(records_written)+" sequences to file: "+ file_dir_output +".";
-print "";
-
-print "#################### End quickOrtho ####################";
+if not quiet:
+	print "Successfully wrote "+repr(records_written)+" sequences to file: "+ file_dir_output +".";
+	print "";
+	print "#################### End quickOrtho ####################";
 
