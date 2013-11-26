@@ -9,14 +9,14 @@ How: Extracts a non-redundant list of best hits from a multi-query blast and fet
 Example
 -------------------------
 
-    python quickOrtho.py myMultiBlast.xml protein myemail@gmail.com -n 40 -e 1e-5 -o outputFile.fas
+    python quickOrtho.py myMultiBlast.xml protein myemail@gmail.com -n 40 -e 1e-5 -o outputFile.fas -t -q
 
 Takes the top 40 unique gids for each query from xml, outputs non-redundant .fas file containing sequences.
 
 Options
 -------------------------
 
-usage: quickOrtho.py file_dir {protein,nucleotide} email [-h] [-n NUMBER_UNIQUE_GIDS] [-e E_VALUE_THRESHOLD] [-o OUTPUT_DIR]
+usage: quickOrtho.py file_dir {protein,nucleotide} email [-h] [-n NUMBER_UNIQUE_GIDS] [-e E_VALUE_THRESHOLD] [-o OUTPUT_DIR] [-t table][-q quiet] 
 
 <table>
 
@@ -47,7 +47,12 @@ usage: quickOrtho.py file_dir {protein,nucleotide} email [-h] [-n NUMBER_UNIQUE_
   <tr>
     <td>-o</td><td>OUTPUT_DIR</td><td>Set name of output fasta file</td>
   </tr>
-
+  <tr>
+    <td>-t</td><td>table</td><td>Creates a new .txt table summarising top hits for each query</td>
+  </tr>
+  <tr>
+    <td>-q</td><td>quiet</td><td>Runs the program in quiet mode, with no running feedback</td>
+  </tr>
   <tr>
     <td>-h</td><td>help</td><td>Print help message and exit</td>
   </tr>
