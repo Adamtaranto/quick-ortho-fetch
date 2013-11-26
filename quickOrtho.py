@@ -1,4 +1,4 @@
-#! /usr/local/bin/python
+#! /usr/bin/python
 # Python 2.7.5, requires Biopython.
 
 # 1. Opens .xml BLAST result file
@@ -12,7 +12,8 @@
 
 
 ### Import modules
-import argparse; 
+import argparse; #for command line flags and input.
+import sys;
 import xml.etree.ElementTree as etree; #for generic xml handling
 from Bio import SeqIO; #For .fasta output
 from Bio import Entrez; #For .fasta output
@@ -57,37 +58,46 @@ def query_hit_table(dictionary):
 
 ### Argument handling
 arg_parser = argparse.ArgumentParser(description='Takes the top x number of unique gids for each query from xml, outputs non-redundant .fas file containing sequences. Give command as $ python quickOrtho.py openFile.xml database yourEmail@address.com -n integer -e number -o outputFile.fas');
-arg_parser.add_argument("file_dir", help="Directory to NCBI .xml file.");
+arg_parser.add_argument("file_dir", help="Directory to NCBI .xml file. To use stdin (for piped input) enter '-'");
 arg_parser.add_argument("database", help="Which database to direct entrez query to.", choices=['protein','nucleotide']);
 arg_parser.add_argument("email", help="Email for entrez record retrieval, tells NCBI who you are.");
 arg_parser.add_argument("-n", "--number_unique_gids", type=int, default=50, help="Number of unique gids to extract for each query");
 arg_parser.add_argument("-e", "--e_value_threshold", type=float, default=1e-20, help="Maximum e-value allowed in screening, enter as decimal or in scientific notation (eg. 1e-20)");
-arg_parser.add_argument("-o", "--file_dir_output", default="default.fas", help="Directory/name of output file");
+arg_parser.add_argument("-o", "--file_dir_output", default=None, help="Directory/name of output file. To use stdout (for piped output) enter '-'. NB, quiet operation will automatically be enabled for stdout output");
 arg_parser.add_argument("-t", "--table", action="store_true", help="Toggles option to create another .txt file showing a table with the top n hits and their evalues for each query. ie. which hits came from which queries. Nb best viewed without text wrapping.")
 arg_parser.add_argument("-q", "--quiet", action="store_true", help="Toggles option, to run without printing running feedback");
 args = arg_parser.parse_args();
 
 ### Variable definitions/declarations
 file_dir = args.file_dir; #directory of .xml file to be parsed.
+if file_dir=='-':
+	file_dir = sys.stdin;
+
+file_dir_output = args.file_dir_output;
+if file_dir_output is None:
+	if args.file_dir =='-':
+		file_dir_output = "stdin_quickOrthoResults.fas";
+	else:
+		file_dir_output = file_dir.split('.xml')[0]+"_quickOrthoResults.fas";
+#elif file_dir_output=='-':
+#	file_dir_output = sys.stdout;
+
 number_unique_gids = args.number_unique_gids; #number of unique gids to be fetched for each query id.
 e_value_threshold = args.e_value_threshold; #E-value threshold.
-gene_dict = {}; #dictionary keyed by query id, with value = tuple (gid, evalue) that match evalue requirement
+gene_dict = {}; #dictionary keyed by query id, with value = list of tuples (gid, evalue) that match evalue requirement
 gene_list_master = []; #list of x ordered unique gids for entrez record retrieval
 Entrez.email = args.email; #Required for request 
 temp_hit_set = set(); #temporary set for handling duplicated results between query ids/dictionary keys
-file_dir_output = args.file_dir_output;
-if file_dir_output == "default.fas":
-	file_dir_output = file_dir.split('.xml')[0]+"_quickOrthoResults.fas";
 database = args.database;
 quiet = args.quiet; #Boolean toggle for realtime feedback. Default is not quiet, ie verbose, ie print realtime feedback.
 table_output=args.table; #Boolean tobble for outputting summary table for hits to a different .txt file.
-table_dir_output = file_dir_output.split('.fas')[0]+'_summaryTable.txt';
+table_dir_output = str(file_dir_output).split('.fas')[0]+'_summaryTable.txt';
 
 ### Code
 if not quiet:
-	print "#################### Begin quickOrtho ####################";
-	print "";
-	print "Extracting records from "+repr(file_dir)+".";
+	print("#################### Begin quickOrtho ####################");
+	print("");
+	print("Extracting records from {}.".format(file_dir));
 
 xml_root = etree.parse(file_dir).getroot();
 xml_iterations = xml_root.find("BlastOutput_iterations").findall("Iteration"); #list of xml elements <iteration>
@@ -104,11 +114,11 @@ for iteration in xml_iterations: #Loops through each alignment query.
 		gene_dict[xml_iterations_queryID] = gene_list;
 
 if not quiet:
-	print "Sorting extracted results and retrieving top "+repr(number_unique_gids)+" for each query.";
+	print("Sorting extracted results and retrieving top {} for each query.".format(str(number_unique_gids)));
 
 for key in gene_dict:
 	seen = set(); #temporary set for handling duplications within query id lists
-	gene_dict[key] = [x for x in gene_dict[key] if x not in seen and not seen.add(x)] #Removes duplicates from the list of tuples for each query id
+	gene_dict[key] = [x for x in gene_dict[key] if x not in seen and not seen.add(x)]; #Removes duplicates from the list of tuples for each query id
 	gene_dict[key].sort(key=lambda tup: tup[1]); # Sort in place by evalue (tup[1]), small to big
 	if len(gene_dict[key]) > number_unique_gids: #Selects the requested number of lowest e-values from gene_list then outputs to gene_list_master
 		i=0;
@@ -128,8 +138,8 @@ for key in gene_dict:
 temp_hit_set.clear();
 
 if not quiet:
-	print "Found "+`len(gene_dict)`+" queries in xml, containing total "+`sum([len(gene_dict[key]) for key in gene_dict])`+" unique (to query) gid's with e-value < "+repr(e_value_threshold)+".";
-	print "Fetching "+`len(gene_list_master)`+" unique records from NCBI.";
+	print("Found {} queries in xml, containing total {} unique (to query) gid's with e-value < {}.".format(len(gene_dict), sum([len(gene_dict[key]) for key in gene_dict]), str(e_value_threshold)));
+	print("Fetching {} unique records from NCBI.".format(len(gene_list_master)));
 
 records_written=0; #counts how many files retrieved successfully 
 with open(file_dir_output, 'w') as file_output: #opens output fasta file, can also be append mode if required?
@@ -139,26 +149,26 @@ with open(file_dir_output, 'w') as file_output: #opens output fasta file, can al
 			Entrez_record = SeqIO.read(Entrez_handle, "fasta");
 			Entrez_handle.close();
 			SeqIO.write(Entrez_record, file_output, "fasta");
-			records_written+=1
+			records_written+=1;
 			if not quiet: 
-				print "Retrieving record "+repr(records_written)+" of "+repr(len(gene_list_master))+". gi|"+gid+".";
+				print("Retrieving record {} of {}. gi|{}.".format(records_written, len(gene_list_master), gid));
 		except: #Catches all exceptions
-			print "Error retrieving or writing "+repr(gid)+", please check fasta file/xml and try again.";
-			print "Hint: Check that gi|'number' is present in xml file";
-			print repr(sys.exc_info());
+			print("Error retrieving or writing {}, please check fasta file/xml and try again.".format(repr(gid)));
+			print("Hint: Check that gi|'number' is present in xml file");
+			print(repr(sys.exc_info()));
 			raise; #If you want the loop to continue running after errors, comment out the raise (this line).
 
 if not quiet:
-	print "Successfully wrote "+repr(records_written)+" sequences to file: "+ file_dir_output +".";
+	print("Successfully wrote {} sequences to file: {}.".format(records_written, file_dir_output));
 
 if table_output: #if table is flagged to be output. 
 	with open(table_dir_output, 'w') as file_output:
-		table=query_hit_table(gene_dict)
+		table=query_hit_table(gene_dict);
 		file_output.write(table);
 		if not quiet:
-			print "Successfully wrote hit summary table to file: "+table_dir_output+"."
+			print("Successfully wrote hit summary table to file: {}.".format(table_dir_output));
 
 if not quiet:
-	print "";
-	print "#################### End quickOrtho ####################";
+	print("");
+	print("#################### End quickOrtho ####################");
 
