@@ -34,8 +34,26 @@ def iteration_gi_extract(iteration_object): #takes iteration number, finds gid f
 	if query_id == []:
 		query_id = regex.findall(iteration_object.find("Iteration_query-def").text.strip());
 		if query_id == []: #handles the event that the query has no gid, ie it may be an unpublished sequence.
-			query_id = [iteration_object.find("Iteration_query-def").text.replace(" ", "_") + iteration_object.find("Iteration_query-ID").text]; #note that this is as a list because the regex.findall() terms give lists as output, it took fewer steps change this.
+			query_id = [iteration_object.find("Iteration_query-def").text.replace(" ", "_")]; #note that this is as a list because the regex.findall() terms give lists as output, it took fewer steps change this.
 	return query_id[0];
+
+def query_hit_table(dictionary):
+	query_heading = [x for x in dictionary];
+	table='';
+	for query in query_heading:
+		if len(dictionary[query])!=0:
+			if len(query)<=23:
+				row = '{:>26}'.format(str(query+" ||"))
+			else:
+				row = '{:>26}'.format(str(query[:20]+"... ||"));
+			i=0;
+			for hit in dictionary[query]:
+				row+=''.join(' gi|{:<10} e|{:<10e};'.format(hit[0], hit[1]));
+				i+=1;
+				if i>= number_unique_gids:
+					break;
+			table+= row+"\n";
+	return table;
 
 ### Argument handling
 arg_parser = argparse.ArgumentParser(description='Takes the top x number of unique gids for each query from xml, outputs non-redundant .fas file containing sequences. Give command as $ python quickOrtho.py openFile.xml database yourEmail@address.com -n integer -e number -o outputFile.fas');
@@ -45,6 +63,7 @@ arg_parser.add_argument("email", help="Email for entrez record retrieval, tells 
 arg_parser.add_argument("-n", "--number_unique_gids", type=int, default=50, help="Number of unique gids to extract for each query");
 arg_parser.add_argument("-e", "--e_value_threshold", type=float, default=1e-20, help="Maximum e-value allowed in screening, enter as decimal or in scientific notation (eg. 1e-20)");
 arg_parser.add_argument("-o", "--file_dir_output", default="default.fas", help="Directory/name of output file");
+arg_parser.add_argument("-t", "--table", action="store_true", help="Toggles option to create another .txt file showing a table with the top n hits and their evalues for each query. ie. which hits came from which queries. Nb best viewed without text wrapping.")
 arg_parser.add_argument("-q", "--quiet", action="store_true", help="Toggles option, to run without printing running feedback");
 args = arg_parser.parse_args();
 
@@ -60,7 +79,9 @@ file_dir_output = args.file_dir_output;
 if file_dir_output == "default.fas":
 	file_dir_output = file_dir.split('.xml')[0]+"_quickOrthoResults.fas";
 database = args.database;
-quiet = args.quiet;
+quiet = args.quiet; #Boolean toggle for realtime feedback. Default is not quiet, ie verbose, ie print realtime feedback.
+table_output=args.table; #Boolean tobble for outputting summary table for hits to a different .txt file.
+table_dir_output = file_dir_output.split('.fas')[0]+'_summaryTable.txt';
 
 ### Code
 if not quiet:
@@ -89,7 +110,6 @@ for key in gene_dict:
 	seen = set(); #temporary set for handling duplications within query id lists
 	gene_dict[key] = [x for x in gene_dict[key] if x not in seen and not seen.add(x)] #Removes duplicates from the list of tuples for each query id
 	gene_dict[key].sort(key=lambda tup: tup[1]); # Sort in place by evalue (tup[1]), small to big
-
 	if len(gene_dict[key]) > number_unique_gids: #Selects the requested number of lowest e-values from gene_list then outputs to gene_list_master
 		i=0;
 		while (i<number_unique_gids):
@@ -130,6 +150,15 @@ with open(file_dir_output, 'w') as file_output: #opens output fasta file, can al
 
 if not quiet:
 	print "Successfully wrote "+repr(records_written)+" sequences to file: "+ file_dir_output +".";
+
+if table_output: #if table is flagged to be output. 
+	with open(table_dir_output, 'w') as file_output:
+		table=query_hit_table(gene_dict)
+		file_output.write(table);
+		if not quiet:
+			print "Successfully wrote hit summary table to file: "+table_dir_output+"."
+
+if not quiet:
 	print "";
 	print "#################### End quickOrtho ####################";
 
