@@ -19,7 +19,6 @@ from Bio import SeqIO; #For .fasta output
 from Bio import Entrez; #For .fasta output
 import re; #used for extracting gi numbers from complex strings
 
-
 ### Functions
 
 def gi_extract(hit_object): #takes <hit> object, looks for gid in <Hit_id> then <Hit_def>, returns gid
@@ -38,7 +37,7 @@ def iteration_gi_extract(iteration_object): #takes iteration number, finds gid f
 			query_id = [iteration_object.find("Iteration_query-def").text.replace(" ", "_")]; #note that this is as a list because the regex.findall() terms give lists as output, it took fewer steps change this.
 	return query_id[0];
 
-def query_hit_table(dictionary):
+def query_hit_table(dictionary): #
 	query_heading = [x for x in dictionary];
 	table='';
 	for query in query_heading:
@@ -55,6 +54,47 @@ def query_hit_table(dictionary):
 					break;
 			table+= row+"\n";
 	return table;
+def write_sequences_fast(): #faster but more memory intensive output system, less appropriate for retrieving large sequences. Stores all records retrieved from entrez in a single object then writes either to stdout or file.
+	try:
+		Entrez_handle = Entrez.efetch(db=database, rettype="fasta", retmode="text", id = gene_list_master); 
+		if file_dir_output == sys.stdout:
+			Entrez_record = "".join(Entrez_handle);
+			sys.stdout.write(Entrez_record);
+		else:
+			Entrez_record = SeqIO.parse(Entrez_handle, "fasta");
+			SeqIO.write(Entrez_record, file_output, "fasta");
+		Entrez_handle.close();
+	except: #Catches all exceptions
+		print("Error retrieving or writing from Entrez, please check fasta file/xml and try again.");
+		print("Hint: Check that gi|'number' is present in xml file");
+		print(repr(sys.exc_info()));
+		raise; #If you want the loop to continue running after errors, comment out the raise (this line).
+	if not quiet:
+		print("Successfully wrote sequences to file: {}.".format(file_dir_output));
+
+
+def write_sequences_slow(): #Slower output system, using multiple entrez queries and progressive writing to file or stdout. Should be less memory instensive than write_sequences_fast()
+	records_written=0;
+	for gid in gene_list_master:
+		try:
+			Entrez_handle = Entrez.efetch(db=database, rettype="fasta", retmode="text", id = gid); 
+			if file_dir_output == sys.stdout:
+				Entrez_record = "".join(Entrez_handle);
+				sys.stdout.write(Entrez_record);
+			else:
+				Entrez_record = SeqIO.read(Entrez_handle, "fasta");
+				SeqIO.write(Entrez_record, file_output, "fasta");
+			Entrez_handle.close();
+			records_written+=1;
+			if not quiet: 
+				print("Retrieving record {} of {}. gi|{}.".format(records_written, len(gene_list_master), gid));
+		except: #Catches all exceptions
+			print("Error retrieving or writing {}, please check fasta file/xml and try again.".format(repr(gid)));
+			print("Hint: Check that gi|'number' is present in xml file");
+			print(repr(sys.exc_info()));
+			raise; #If you want the loop to continue running after errors, comment out the raise (this line).	
+	if not quiet:
+		print("Successfully wrote {} sequences to file: {}.".format(records_written, file_dir_output));
 
 ### Argument handling
 arg_parser = argparse.ArgumentParser(description='Takes the top x number of unique gids for each query from xml, outputs non-redundant .fas file containing sequences. Give command as $ python quickOrtho.py openFile.xml database yourEmail@address.com -n integer -e number -o outputFile.fas');
@@ -79,8 +119,8 @@ if file_dir_output is None:
 		file_dir_output = "stdin_quickOrthoResults.fas";
 	else:
 		file_dir_output = file_dir.split('.xml')[0]+"_quickOrthoResults.fas";
-#elif file_dir_output=='-':
-#	file_dir_output = sys.stdout;
+elif file_dir_output=='-':
+	file_dir_output = sys.stdout;
 
 number_unique_gids = args.number_unique_gids; #number of unique gids to be fetched for each query id.
 e_value_threshold = args.e_value_threshold; #E-value threshold.
@@ -90,6 +130,8 @@ Entrez.email = args.email; #Required for request
 temp_hit_set = set(); #temporary set for handling duplicated results between query ids/dictionary keys
 database = args.database;
 quiet = args.quiet; #Boolean toggle for realtime feedback. Default is not quiet, ie verbose, ie print realtime feedback.
+if file_dir_output==sys.stdout:
+	quiet = 'true'
 table_output=args.table; #Boolean tobble for outputting summary table for hits to a different .txt file.
 table_dir_output = str(file_dir_output).split('.fas')[0]+'_summaryTable.txt';
 
@@ -141,32 +183,18 @@ if not quiet:
 	print("Found {} queries in xml, containing total {} unique (to query) gid's with e-value < {}.".format(len(gene_dict), sum([len(gene_dict[key]) for key in gene_dict]), str(e_value_threshold)));
 	print("Fetching {} unique records from NCBI.".format(len(gene_list_master)));
 
-records_written=0; #counts how many files retrieved successfully 
-with open(file_dir_output, 'w') as file_output: #opens output fasta file, can also be append mode if required?
-	for gid in gene_list_master:
-		try:
-			Entrez_handle = Entrez.efetch(db=database, rettype="fasta", retmode="text", id = gid); 
-			Entrez_record = SeqIO.read(Entrez_handle, "fasta");
-			Entrez_handle.close();
-			SeqIO.write(Entrez_record, file_output, "fasta");
-			records_written+=1;
-			if not quiet: 
-				print("Retrieving record {} of {}. gi|{}.".format(records_written, len(gene_list_master), gid));
-		except: #Catches all exceptions
-			print("Error retrieving or writing {}, please check fasta file/xml and try again.".format(repr(gid)));
-			print("Hint: Check that gi|'number' is present in xml file");
-			print(repr(sys.exc_info()));
-			raise; #If you want the loop to continue running after errors, comment out the raise (this line).
-
-if not quiet:
-	print("Successfully wrote {} sequences to file: {}.".format(records_written, file_dir_output));
+if file_dir_output==sys.stdout:
+	write_sequences_fast();
+else:
+	with open(file_dir_output, 'w') as file_output: #opens output fasta file, can also be append mode if required?
+		write_sequences_fast();
 
 if table_output: #if table is flagged to be output. 
 	with open(table_dir_output, 'w') as file_output:
 		table=query_hit_table(gene_dict);
 		file_output.write(table);
-		if not quiet:
-			print("Successfully wrote hit summary table to file: {}.".format(table_dir_output));
+	if not quiet:
+		print("Successfully wrote hit summary table to file: {}.".format(table_dir_output));
 
 if not quiet:
 	print("");
