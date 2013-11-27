@@ -13,29 +13,18 @@
 
 ### Import modules
 import argparse; #for command line flags and input.
-import sys;
-import xml.etree.ElementTree as etree; #for generic xml handling
+import sys; #for stdin, stdout input-output handling.
 from Bio import SeqIO; #For .fasta output
 from Bio import Entrez; #For .fasta output
 import re; #used for extracting gi numbers from complex strings
+from Bio.Blast import NCBIXML; #for generic xml handling
 
-### Functions
-
-def gi_extract(hit_object): #takes <hit> object, looks for gid in <Hit_id> then <Hit_def>, returns gid
+def gi_extract(gi_string): #takes string object, returns gid
 	regex = re.compile("^gi\|(\w+)");
-	hit_id = regex.findall(hit_object.find("Hit_id").text.strip());
-	if hit_id == []:
-		hit_id = regex.findall(hit_object.find("Hit_def").text.strip());
+	hit_id = regex.findall(gi_string.strip());
+	if hit_id==[]: #handles the event that the query has no gid, ie it may be an unpublished sequence.
+		hit_id = [gi_string.replace(" ", "_")]; #note that this is as a list because the regex.findall() terms give lists as output, it took fewer steps change this.
 	return hit_id[0];
-
-def iteration_gi_extract(iteration_object): #takes iteration number, finds gid for query id in either <Iteration_query-def> or <Iteration_query-ID>
-	regex = re.compile("^gi\|(\w+)");
-	query_id = regex.findall(iteration_object.find("Iteration_query-ID").text.strip());
-	if query_id == []:
-		query_id = regex.findall(iteration_object.find("Iteration_query-def").text.strip());
-		if query_id == []: #handles the event that the query has no gid, ie it may be an unpublished sequence.
-			query_id = [iteration_object.find("Iteration_query-def").text.replace(" ", "_")]; #note that this is as a list because the regex.findall() terms give lists as output, it took fewer steps change this.
-	return query_id[0];
 
 def query_hit_table(dictionary): #
 	query_heading = [x for x in dictionary];
@@ -54,6 +43,7 @@ def query_hit_table(dictionary): #
 					break;
 			table+= row+"\n";
 	return table;
+
 def write_sequences_fast(): #faster but more memory intensive output system, less appropriate for retrieving large sequences. Stores all records retrieved from entrez in a single object then writes either to stdout or file.
 	try:
 		Entrez_handle = Entrez.efetch(db=database, rettype="fasta", retmode="text", id = gene_list_master); 
@@ -71,30 +61,6 @@ def write_sequences_fast(): #faster but more memory intensive output system, les
 		raise; #If you want the loop to continue running after errors, comment out the raise (this line).
 	if not quiet:
 		print("Successfully wrote sequences to file: {}.".format(file_dir_output));
-
-
-def write_sequences_slow(): #Slower output system, using multiple entrez queries and progressive writing to file or stdout. Should be less memory instensive than write_sequences_fast()
-	records_written=0;
-	for gid in gene_list_master:
-		try:
-			Entrez_handle = Entrez.efetch(db=database, rettype="fasta", retmode="text", id = gid); 
-			if file_dir_output == sys.stdout:
-				Entrez_record = "".join(Entrez_handle);
-				sys.stdout.write(Entrez_record);
-			else:
-				Entrez_record = SeqIO.read(Entrez_handle, "fasta");
-				SeqIO.write(Entrez_record, file_output, "fasta");
-			Entrez_handle.close();
-			records_written+=1;
-			if not quiet: 
-				print("Retrieving record {} of {}. gi|{}.".format(records_written, len(gene_list_master), gid));
-		except: #Catches all exceptions
-			print("Error retrieving or writing {}, please check fasta file/xml and try again.".format(repr(gid)));
-			print("Hint: Check that gi|'number' is present in xml file");
-			print(repr(sys.exc_info()));
-			raise; #If you want the loop to continue running after errors, comment out the raise (this line).	
-	if not quiet:
-		print("Successfully wrote {} sequences to file: {}.".format(records_written, file_dir_output));
 
 ### Argument handling
 arg_parser = argparse.ArgumentParser(description='Takes the top x number of unique gids for each query from xml, outputs non-redundant .fas file containing sequences. Give command as $ python quickOrtho.py openFile.xml database yourEmail@address.com -n integer -e number -o outputFile.fas');
@@ -131,7 +97,7 @@ temp_hit_set = set(); #temporary set for handling duplicated results between que
 database = args.database;
 quiet = args.quiet; #Boolean toggle for realtime feedback. Default is not quiet, ie verbose, ie print realtime feedback.
 if file_dir_output==sys.stdout:
-	quiet = 'true'
+	quiet = 'true';
 table_output=args.table; #Boolean tobble for outputting summary table for hits to a different .txt file.
 table_dir_output = str(file_dir_output).split('.fas')[0]+'_summaryTable.txt';
 
@@ -141,19 +107,23 @@ if not quiet:
 	print("");
 	print("Extracting records from {}.".format(file_dir));
 
-xml_root = etree.parse(file_dir).getroot();
-xml_iterations = xml_root.find("BlastOutput_iterations").findall("Iteration"); #list of xml elements <iteration>
-for iteration in xml_iterations: #Loops through each alignment query.
-	xml_iterations_queryID = iteration_gi_extract(iteration); 
+if args.file_dir == '-':
+	XML_handle=file_dir;
+else:
+	XML_handle=open(file_dir);
+
+blast_record = NCBIXML.parse(XML_handle);
+for blast_query in blast_record:
+	query_id = gi_extract(blast_query.query);
 	gene_list = [];
-	xml_hits = iteration.find("Iteration_hits").findall("Hit"); #List of xml hits for each iteration.
-	if xml_iterations_queryID not in gene_dict: #Prevents looping through alignments already done.
-		for hit in xml_hits: #Loops through alignment hits in xml.
-			hit_id = gi_extract(hit);
-			hit_evalue = float(hit.find("Hit_hsps").find("Hsp").findall("Hsp_evalue")[0].text);
-			if hit_evalue <= e_value_threshold and hit_id != xml_iterations_queryID: #adds hits e_value less than required to list, excludes hits already in list.
+	for alignment in blast_query.alignments:	
+		for hsp in alignment.hsps:
+			hit_id = gi_extract(str(alignment.title));
+			hit_evalue = float(hsp.expect);
+			if hit_evalue <= e_value_threshold and hit_id != query_id: #adds hits e_value less than required to list, excludes hits already in list.
 				gene_list.append((hit_id, hit_evalue));
-		gene_dict[xml_iterations_queryID] = gene_list;
+		gene_dict[query_id] = gene_list;
+XML_handle.close();
 
 if not quiet:
 	print("Sorting extracted results and retrieving top {} for each query.".format(str(number_unique_gids)));
@@ -199,4 +169,45 @@ if table_output: #if table is flagged to be output.
 if not quiet:
 	print("");
 	print("#################### End quickOrtho ####################");
+
+
+### Lecgacy bits, still functional and able to replace currently used counterpart, but not used at the moment
+"""
+xml_root = etree.parse(file_dir).getroot();
+xml_iterations = xml_root.find("BlastOutput_iterations").findall("Iteration"); #list of xml elements <iteration>
+for iteration in xml_iterations: #Loops through each alignment query.
+	xml_iterations_queryID = iteration_gi_extract(iteration); 
+	gene_list = [];
+	xml_hits = iteration.find("Iteration_hits").findall("Hit"); #List of xml hits for each iteration.
+	if xml_iterations_queryID not in gene_dict: #Prevents looping through alignments already done.
+		for hit in xml_hits: #Loops through alignment hits in xml.
+			hit_id = gi_extract(hit);
+			hit_evalue = float(hit.find("Hit_hsps").find("Hsp").findall("Hsp_evalue")[0].text);
+			if hit_evalue <= e_value_threshold and hit_id != xml_iterations_queryID: #adds hits e_value less than required to list, excludes hits already in list.
+				gene_list.append((hit_id, hit_evalue));
+		gene_dict[xml_iterations_queryID] = gene_list;
+
+def write_sequences_slow(): #Slower output system, using multiple entrez queries and progressive writing to file or stdout. Should be less memory instensive than write_sequences_fast()
+	records_written=0;
+	for gid in gene_list_master:
+		try:
+			Entrez_handle = Entrez.efetch(db=database, rettype="fasta", retmode="text", id = gid); 
+			if file_dir_output == sys.stdout:
+				Entrez_record = "".join(Entrez_handle);
+				sys.stdout.write(Entrez_record);
+			else:
+				Entrez_record = SeqIO.read(Entrez_handle, "fasta");
+				SeqIO.write(Entrez_record, file_output, "fasta");
+			Entrez_handle.close();
+			records_written+=1;
+			if not quiet: 
+				print("Retrieving record {} of {}. gi|{}.".format(records_written, len(gene_list_master), gid));
+		except: #Catches all exceptions
+			print("Error retrieving or writing {}, please check fasta file/xml and try again.".format(repr(gid)));
+			print("Hint: Check that gi|'number' is present in xml file");
+			print(repr(sys.exc_info()));
+			raise; #If you want the loop to continue running after errors, comment out the raise (this line).	
+	if not quiet:
+		print("Successfully wrote {} sequences to file: {}.".format(records_written, file_dir_output));
+"""
 

@@ -37,18 +37,18 @@ usage: quickOrtho.py file_dir {protein,nucleotide} email [-h] [-n NUMBER_UNIQUE_
   </tr>
 
   <tr>
-	<td>-e</td><td>E_VALUE_THRESHOLD</td><td>Maximum e-value allowed in screening, enter as decimal or in scientific notation (eg. 1e-20)</td>
+	<td>-e</td><td>E_VALUE_THRESHOLD</td><td>Maximum e-value allowed in screening, enter as decimal or in scientific notation (eg. 1e-20). Default = 1e-20</td>
   </tr>
 
   <tr>
-    <td>-n</td><td>NUMBER_UNIQUE_GIDS</td><td>Number of unique gids to extract for each query</td>
+    <td>-n</td><td>NUMBER_UNIQUE_GIDS</td><td>Number of unique gids to extract for each query. Default = 50</td>
   </tr>
 
   <tr>
-    <td>-o</td><td>OUTPUT_DIR</td><td>Set name of output fasta file</td>
+    <td>-o</td><td>OUTPUT_DIR</td><td>Set name of output fasta file. Default = "'input_dir'_quickOrthoResults.fas"</td>
   </tr>
   <tr>
-    <td>-t</td><td>table</td><td>Creates a new .txt table summarising top hits for each query</td>
+    <td>-t</td><td>table</td><td>Creates a new .txt table summarising top hits for each query. Writes file to "'output_dir'_summaryTable.txt". Recommend viewing this file in a text editor without text wrapping.</td>
   </tr>
   <tr>
     <td>-q</td><td>quiet</td><td>Runs the program in quiet mode, with no running feedback</td>
