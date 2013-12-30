@@ -45,31 +45,34 @@ def query_hit_table(dictionary): #
 	return table;
 
 def write_sequences_fast(): #faster but more memory intensive output system, less appropriate for retrieving large sequences. Stores all records retrieved from entrez in a single object then writes either to stdout or file.
-	try:
-		Entrez_handle = Entrez.efetch(db=database, rettype="fasta", retmode="text", id = gene_list_master); 
-		if file_dir_output == sys.stdout:
-			Entrez_record = "".join(Entrez_handle);
-			sys.stdout.write(Entrez_record);
-		else:
-			Entrez_record = SeqIO.parse(Entrez_handle, "fasta");
-			SeqIO.write(Entrez_record, file_output, "fasta");
-		Entrez_handle.close();
-	except: #Catches all exceptions
-		print("Error retrieving or writing from Entrez, please check fasta file/xml and try again.");
-		print("Hint: Check that gi|'number' is present in xml file");
-		print(repr(sys.exc_info()));
-		raise; #If you want the loop to continue running after errors, comment out the raise (this line).
+	num=0;
+	for group in [gene_list_master[i:i+retrieve_number] for i in xrange(0, len(gene_list_master), retrieve_number)]:
+		try:
+			Entrez_handle = Entrez.efetch(db=database, rettype="fasta", retmode="text", id = group); 
+			if file_dir_output == sys.stdout:
+				Entrez_record = "".join(Entrez_handle);
+				sys.stdout.write(Entrez_record);
+			else:
+				Entrez_record = SeqIO.parse(Entrez_handle, "fasta");
+				num+=SeqIO.write(Entrez_record, file_output, "fasta");
+			Entrez_handle.close();
+		except: #Catches all exceptions
+			print("Error retrieving or writing from Entrez, please check fasta file/xml and try again.");
+			print("Hint: Check that gi|'number' is present in xml file");
+			print(repr(sys.exc_info()));
+			raise; #If you want the loop to continue running after errors, comment out the raise (this line).
 	if not quiet:
-		print("Successfully wrote sequences to file: {}.".format(file_dir_output));
+		print("Successfully wrote {} sequences to file: {}.".format(num, file_dir_output));
 
 ### Argument handling
-arg_parser = argparse.ArgumentParser(description='Takes the top x number of unique gids for each query from xml, outputs non-redundant .fas file containing sequences. Give command as $ python quickOrtho.py openFile.xml database yourEmail@address.com -n integer -e number -o outputFile.fas');
+arg_parser = argparse.ArgumentParser(description='Takes the top x number of unique gids for each query from xml, outputs non-redundant .fas file containing sequences. Give command as $ python quickOrtho.py openFile.xml database yourEmail@address.com -n integer -e number -o outputFile.fa');
 arg_parser.add_argument("file_dir", help="Directory to NCBI .xml file. To use stdin (for piped input) enter '-'");
 arg_parser.add_argument("database", help="Which database to direct entrez query to.", choices=['protein','nucleotide']);
 arg_parser.add_argument("email", help="Email for entrez record retrieval, tells NCBI who you are.");
 arg_parser.add_argument("-n", "--number_unique_gids", type=int, default=50, help="Number of unique gids to extract for each query");
 arg_parser.add_argument("-e", "--e_value_threshold", type=float, default=1e-20, help="Maximum e-value allowed in screening, enter as decimal or in scientific notation (eg. 1e-20)");
 arg_parser.add_argument("-o", "--file_dir_output", default=None, help="Directory/name of output file. To use stdout (for piped output) enter '-'. NB, quiet operation will automatically be enabled for stdout output");
+arg_parser.add_argument("-r", "--retrieve_number", type=int, default=100, help="Number of records to extract from NCBI at a time. Larger numbers will be faster but more memory and time intensive. Default: 100");
 arg_parser.add_argument("-t", "--table", action="store_true", help="Toggles option to create another .txt file showing a table with the top n hits and their evalues for each query. ie. which hits came from which queries. Nb best viewed without text wrapping.")
 arg_parser.add_argument("-q", "--quiet", action="store_true", help="Toggles option, to run without printing running feedback");
 args = arg_parser.parse_args();
@@ -84,12 +87,13 @@ if file_dir_output is None:
 	if args.file_dir =='-':
 		file_dir_output = "stdin_quickOrthoResults.fas";
 	else:
-		file_dir_output = file_dir.split('.xml')[0]+"_quickOrthoResults.fas";
+		file_dir_output = file_dir.split('.xml')[0]+"_quickOrthoResults.fa";
 elif file_dir_output=='-':
 	file_dir_output = sys.stdout;
 
 number_unique_gids = args.number_unique_gids; #number of unique gids to be fetched for each query id.
 e_value_threshold = args.e_value_threshold; #E-value threshold.
+retrieve_number = args.retrieve_number; #Number of records to extract from NCBI at a time.
 gene_dict = {}; #dictionary keyed by query id, with value = list of tuples (gid, evalue) that match evalue requirement
 gene_list_master = []; #list of x ordered unique gids for entrez record retrieval
 Entrez.email = args.email; #Required for request 
